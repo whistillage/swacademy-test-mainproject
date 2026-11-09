@@ -5,11 +5,17 @@
 
 # ---------------------------------------------------------------- 플러그인
 
-# 그래프 DB (미정) - 지금은 JSON 파일 저장소
+# 그래프 DB - OntoKG-EQ PSX 그래프 (RDF). SPARQL 질의 지원
+#   json 저장소로 되돌리기: name: json, params: {path: data/graph/graph.json}
 graph_store:
-  name: json
+  name: rdf
   params:
-    path: data/graph/graph.json
+    paths:
+      - data/graph/psx/demo_psx.ttl    # 원본 (출처: data/graph/psx/SOURCE.md)
+      - data/graph/psx/aliases_ko.ttl  # 한국어 별칭 (이 프로젝트에서 추가)
+    index_classes: [":Company"]        # 대상 노드 찾기에 쓸 노드 종류
+    name_predicates: [":hasCompanyName", "rdfs:label"]
+    alias_predicates: [":hasCompanyIdentifier", "rdfs:label", "skos:altLabel"]
 
 # 대상 노드 찾기용 임베딩 모델 (로컬, 무료)
 #   더 높은 품질: model_name: BAAI/bge-m3, query_prefix: "", passage_prefix: ""
@@ -32,11 +38,19 @@ translator:
   name: identity
   params: {}
 
-# 이미지 생성 모델 (미정) - dummy = 프롬프트를 적은 자리표시 이미지
-# 새 모델 추가: pipeline/plugins/image_generator/_template.py 참고
+# 이미지 생성 모델 - HuggingFace diffusers, 로컬 GPU
+#   model_id 만 바꾸면 다른 모델로 교체. GPU 없이 확인: name: dummy, params: {}
+#   새 종류의 모델 추가: pipeline/plugins/image_generator/_template.py 참고
 image_generator:
-  name: dummy
-  params: {}
+  name: diffusers
+  params:
+    model_id: black-forest-labs/FLUX.2-klein-4B
+    quantization: nf4          # nf4 | int8 | null. 8GB GPU 는 nf4 (약 16GB -> 약 5GB)
+    torch_dtype: bfloat16
+    device: cuda
+    cpu_offload: false
+    num_inference_steps: 4     # FLUX.2-klein 권장값
+    guidance_scale: 1.0
 
 # ---------------------------------------------------------------- 단계 설정
 
@@ -58,6 +72,13 @@ generation:
   num_images: 1
   seed: null
   extra: {}
+
+# 04 카드 글자 합성 - templates.yaml 에 card 가 있으면 이미지 위에 Pillow 로 글자를 찍는다
+# 항목 전체: pipeline/render/card.py 의 CardStyle. 폰트는 자동 탐색 (맑은 고딕 등)
+overlay:
+  enabled: true
+  side: left
+  panel_opacity: 0.78
 
 # ---------------------------------------------------------------- 파일
 

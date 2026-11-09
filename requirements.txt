@@ -5,6 +5,9 @@ pyyaml>=6.0,<7
 python-dotenv>=1.0,<2
 numpy>=2.0,<3
 
+# 그래프 DB - RDF 파일 + SPARQL (graph_store: rdf)
+rdflib>=7.6,<8
+
 # 01 쿼리 구성 - 요청 분석 (request_parser: kiwi)
 kiwipiepy>=0.24,<0.25
 

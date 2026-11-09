@@ -1,43 +1,94 @@
 # GraphRAG 기반 이미지 생성 파이프라인
 
-그래프 DB에서 대상의 특성을 찾아 이미지 생성 프롬프트를 만들고, 그 프롬프트로 이미지를 생성한다.
+그래프 DB에서 대상의 정보를 찾아 이미지 생성 프롬프트를 만들고, 그 프롬프트로 이미지를 생성한다.
 에이전트 없이 순차 워크플로우로 동작하며, **LLM을 호출하지 않는다.**
 
+현재 설정은 **회사 프로필 카드**다. [OntoKG-EQ](data/graph/psx/SOURCE.md) 지식 그래프(파키스탄 증권거래소 4개 회사)에서
+SPARQL로 업종, EPS, 이익 성장률, 종가, 최근 공시를 찾는다. 이미지 모델(FLUX.2-klein-4B)이 업종 배경을 그리고,
+숫자와 한글은 Pillow로 그 위에 찍는다.
+
 ```
-요청 → [01 쿼리 구성] → [02 GraphRAG 검색] → [03 프롬프트 구성] → [04 이미지 생성]
+요청 → [01 쿼리 구성] → [02 GraphRAG 검색] → [03 프롬프트 구성] → [04 이미지 생성 + 카드 글자 합성]
 ```
 
 | 단계 | 하는 일 | 방식 |
 |---|---|---|
 | 01 쿼리 구성 | 요청 분석 → 대상 노드 찾기 → 속성별 쿼리 생성 | 형태소 분석 + 하이브리드 검색(벡터+키워드, RRF) + 속성 체크리스트 |
-| 02 검색 | 속성별로 관계를 따라가며 값 수집, 없으면 상위 개념에서 상속 | 그래프 순회 |
-| 03 프롬프트 구성 | 빈칸 채우기 (사용자 지정 속성 우선) | 템플릿 조합 |
-| 04 이미지 생성 | 프롬프트 → 이미지 | 플러그인 (현재 dummy) |
+| 02 검색 | 속성별 SPARQL 실행 (또는 관계를 따라가며 값 수집) | SPARQL / 그래프 순회 |
+| 03 프롬프트 구성 | 배경 프롬프트 + 카드 내용 만들기 | 템플릿 + 대응표·규칙 |
+| 04 이미지 생성 | 배경 생성 → 카드 글자 합성 | diffusers 플러그인 + Pillow |
 
-## 실행
+## 실행 (Ubuntu / WSL)
 
 ```bash
-# 가상환경 (Python 3.13)
-.venv\Scripts\activate
+source .venv/bin/activate
 pip install -r requirements.txt     # 새로 설치할 때만
 
-python graph_db.py init             # 빈 그래프 DB 생성 (data/graph/graph.json, 이미 생성됨)
-python graph_db.py stats            # 그래프 요약 + 형식 검사
-python run.py "빨간 개구리를 그려줘"
+python graph_db.py stats            # 그래프 요약 (트리플 수, 노드 종류)
+python run.py "OGDC 카드 만들어줘"   # 종목코드, 회사명, 한국어 별칭(엥그로, 파우지비료 ...)으로 찾는다
+python run.py "엥그로 카드" --image-generator dummy   # GPU 없이 확인 (자리표시 배경)
 python run.py --list-plugins        # 등록된 플러그인 확인
-python -m pytest                    # 테스트
+python -m pytest                    # 테스트 (GPU 모델을 불러오지 않음)
 ```
 
-실행 결과는 `output/<실행시각>/`에 단계별로 저장된다.
+찾을 수 있는 회사: `OGDC`, `PPL`, `FFC`, `ENGROH` (별칭은 [aliases_ko.ttl](data/graph/psx/aliases_ko.ttl)).
+
+### GPU 설치 (이미지 생성 모델용)
+
+```bash
+# CUDA 용 torch (RTX 50 시리즈는 CUDA 12.8 이상 빌드 필요). 드라이버의 CUDA 버전은 nvidia-smi 로 확인
+pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cu132 --force-reinstall --no-deps
+pip install -r requirements-gpu.txt
+```
+
+FLUX.2-klein-4B 가중치는 약 16GB이고 첫 실행 때 내려받는다(`~/.cache/huggingface`).
+8GB GPU에서는 `quantization: nf4`(4비트, 약 5GB)로 불러온다. GPU 메모리가 충분하면 `null`로 끈다.
+
+### 실행 결과
+
+`output/<실행시각>/`에 단계별로 저장된다.
 
 | 파일 | 내용 |
 |---|---|
 | `00_request.txt` | 요청 원문 |
 | `01_query_plan.json` | 분석 결과, 찾은 대상 노드(후보와 점수 포함), 속성별 쿼리, 생략한 항목과 이유 |
-| `02_retrieval.json` | 속성별 검색 결과 (found / inherited / missing) |
-| `03_prompt.json` | 최종 프롬프트, 각 값이 어디서 왔는지 |
-| `04_image.png`, `04_generation.json` | 생성 이미지, 모델 요청/응답 정보 |
+| `02_retrieval.json` | 속성별 검색 결과 (found / inherited / missing). SPARQL 결과 행 전체(날짜, 출처 URL 포함) |
+| `03_prompt.json` | 배경 프롬프트, 카드 내용(`card`), 각 값이 어디서 왔는지(`slots`) |
+| `04_background.png` | 이미지 모델이 그린 배경 (카드가 있을 때) |
+| `04_image.png`, `04_generation.json` | 최종 이미지, 모델 요청/응답 정보 (seed, GPU 메모리, 무시한 옵션) |
 | `run.json` | 사용한 플러그인, 단계별 소요 시간, 오류 (중간에 실패해도 남음) |
+
+## 설정 파일
+
+| 파일 | 내용 |
+|---|---|
+| `config/config.yaml` | 플러그인 선택 (그래프 DB, 이미지 모델 등), 이미지 크기, 카드 합성 스타일(`overlay`) |
+| `config/aspects.yaml` | 노드 종류별로 찾을 속성과 그 SPARQL 쿼리 |
+| `config/templates.yaml` | 배경 프롬프트, 값 규칙(대응표, 숫자 형식, 조건), 카드 구성 |
+| `config/lexicon.yaml` | 사용자 지정 속성 사전, 대상에서 뺄 단어(카드, 인포그래픽 ...) |
+
+### 카드 항목 추가 예시 (배당금)
+
+1. `aspects.yaml`의 `Company` 아래에 속성과 SPARQL 추가
+   ```yaml
+   dividend:
+     sparql: |
+       SELECT ?value ?date WHERE {
+         ?obs :isObservationOf ?target ; :hasMetricName "dividend" ;
+              :hasMetricValue ?value ; :hasObservationDate ?date .
+       } ORDER BY DESC(?date) LIMIT 1
+   ```
+2. `templates.yaml`의 `values`에 표시 형식, `card.rows`에 행 추가
+   ```yaml
+   values:
+     dividend: {number: {decimals: 2}}
+   card:
+     rows:
+       - {label: "배당금", value: "{currency[text]} {dividend[text]}", note: "{dividend[date]}"}
+   ```
+
+템플릿 빈칸은 `{속성[필드]}`다. 필드는 `text`(표시용), `raw`(원래 값), SPARQL 변수(`date` 등),
+값 규칙이 만든 필드(`ko`, `scene`, `arrow`, `color`, `mood`)다. 값이 없으면 카드에는 `–`가 찍힌다.
 
 ## 미정 사항 교체 방법
 
@@ -45,58 +96,63 @@ python -m pytest                    # 테스트
 
 | 미정 사항 | 바꿀 곳 |
 |---|---|
-| 이미지 생성 모델 | `pipeline/plugins/image_generator/`에 플러그인 추가 → `image_generator.name` |
-| 그래프 DB | `pipeline/plugins/graph_store/`에 `GraphStore` 구현 추가 → `graph_store.name` |
-| 그래프 스키마 (노드 종류, 관계 이름) | `config/aspects.yaml` |
-| 어떤 이미지를 만들지 (프롬프트 문구, 스타일) | `config/templates.yaml` |
+| 이미지 생성 모델 (diffusers 모델) | `image_generator.params.model_id` |
+| 이미지 생성 모델 (API 등 다른 방식) | `pipeline/plugins/image_generator/`에 플러그인 추가 → `image_generator.name` |
+| 그래프 데이터 (다른 RDF 파일) | `graph_store.params.paths` |
+| 그래프 DB (다른 종류) | `pipeline/plugins/graph_store/`에 `GraphStore` 구현 추가 → `graph_store.name` |
+| 찾을 정보 | `config/aspects.yaml` |
+| 프롬프트 문구, 카드 구성, 한글 대응표 | `config/templates.yaml` |
 | 영어 변환 여부 | `pipeline/plugins/translator/`에 번역 플러그인 추가 → `translator.name` |
 | 임베딩 모델 | `embedder.params.model_name` (예: `BAAI/bge-m3`) |
-| 사용자 지정 속성 감지 범위 | `config/lexicon.yaml` |
 
-### 이미지 생성 모델 붙이기
+### 이미지 생성 모델 바꾸기
 
-1. `pipeline/plugins/image_generator/_template.py`를 복사해 새 파일로 저장 (예: `my_model.py`)
-2. `@register("my_model")`을 붙이고 `generate(ImageRequest) -> GenerationResult`를 구현
-3. `config.yaml`을 수정
-   ```yaml
-   image_generator:
-     name: my_model
-     params:
-       api_key: ${IMAGE_API_KEY}   # 실제 값은 .env 에 저장
-   ```
-4. `python run.py --list-plugins`로 등록됐는지 확인
+diffusers로 불러올 수 있는 HuggingFace 모델이면 `model_id`만 바꾸면 된다. 모델이 지원하지 않는 옵션(예: FLUX의 `negative_prompt`)은
+자동으로 빼고 `04_generation.json`의 `ignored`에 기록한다.
 
-프로젝트 밖의 클래스도 `name: 모듈경로:클래스명` 형식으로 등록 없이 바로 쓸 수 있다.
-한 번만 다른 모델로 돌려보려면 `python run.py "..." --image-generator 이름`을 쓴다.
+```yaml
+image_generator:
+  name: diffusers
+  params:
+    model_id: stabilityai/sdxl-turbo
+    quantization: null
+    num_inference_steps: 4
+    guidance_scale: 0.0
+```
+
+API 방식 등 다른 종류의 모델은 `pipeline/plugins/image_generator/_template.py`를 복사해 플러그인을 만든다.
+카드 글자 합성은 모델과 별도로 동작하므로 모델을 바꿔도 그대로다.
 
 ### 그래프 DB 붙이기
 
-`GraphStore`(`pipeline/plugins/graph_store/base.py`)의 메서드 4개만 구현하면 된다:
-`iter_nodes()`, `get_node()`, `out_edges()`, `stats()`.
+`GraphStore`(`pipeline/plugins/graph_store/base.py`)의 메서드 4개를 구현한다:
+`iter_nodes()`, `get_node()`, `out_edges()`, `stats()`. SPARQL 쿼리를 쓰려면 `query()`도 구현한다.
 노드는 `id / label(종류) / name / aliases / description / properties`, 관계는 `source / target / type`으로 변환해 돌려준다.
 
 ## 폴더 구조
 
 ```
-config/              config.yaml(플러그인 선택), aspects.yaml, templates.yaml, lexicon.yaml
-data/graph/          그래프 DB (현재 빈 JSON)
+config/              config.yaml, aspects.yaml, templates.yaml, lexicon.yaml
+data/graph/psx/      OntoKG-EQ PSX 그래프(원본) + 한국어 별칭 + 출처
 data/index/          노드 임베딩 캐시 (자동 생성)
 pipeline/
   registry.py        플러그인 등록/로드
   runner.py          단계 조립과 순차 실행, 결과 저장
   schemas.py         단계 간 데이터 형식
   query/             01: lexicon(속성 사전), linker(대상 노드 찾기), planner(속성별 쿼리), builder
-  retrieval/         02: executor(쿼리 실행 + 상속)
-  prompt/            03: builder(템플릿 조합)
-  plugins/           graph_store, embedder, request_parser, translator, image_generator
-tests/               fixtures/frog_graph.json(테스트 전용 예시 그래프)
+  retrieval/         02: executor(SPARQL / 경로 탐색 + 상속)
+  prompt/            03: builder(템플릿 조합), values(대응표, 숫자 형식, 조건 규칙)
+  render/            04: card(Pillow 카드 글자 합성)
+  plugins/           graph_store(rdf, json), embedder, request_parser, translator, image_generator(diffusers, dummy)
+tests/               fixtures/mini_market.ttl(회사 카드 테스트), frog_*(경로 탐색 방식 예시)
 run.py               파이프라인 CLI
 graph_db.py          그래프 DB 관리 CLI
 ```
 
 ## 알아둘 점
 
-- `config/aspects.yaml`의 `Animal` 항목과 테스트용 개구리 그래프는 **형식 예시**다. 실제 그래프 스키마가 정해지면 교체한다.
+- 카드는 요청에서 처음 찾은 회사 하나로 만든다.
+- 통화(`currency`)는 그래프 안의 환율 관측치에서 가져온다. 그래프에 시장이 하나일 때만 맞으므로, 여러 시장을 합치면 쿼리를 고쳐야 한다.
+- 경로 탐색 방식(JSON 그래프, `path`, 상위 개념 상속)도 그대로 쓸 수 있다. 예시는 `tests/fixtures/frog_*`.
 - 대상 노드 찾기의 채택 기준값(`linker.min_vector_score`, `min_keyword_overlap`)은 임베딩 모델과 실제 데이터로 다시 맞춰야 한다.
-- 임베딩 모델(약 470MB)은 그래프에 노드가 있고, 이름이 정확히 일치하지 않는 표현을 처음 검색할 때 다운로드된다.
-- 요청 속 속성(예: "빨간")은 바로 뒤에 오는 대상에 붙는다. 1차 버전은 색상만 감지한다.
+- 임베딩 모델(약 470MB)은 이름이나 별칭이 정확히 일치하지 않는 표현을 처음 검색할 때 다운로드된다.

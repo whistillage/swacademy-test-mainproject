@@ -13,15 +13,15 @@ from pipeline.runner import Pipeline
 
 def test_builtin_plugins_are_discovered():
     names = {category: registry.names() for category, registry in REGISTRIES.items()}
-    assert names["graph_store"] == ["json"]
-    assert names["image_generator"] == ["dummy"]  # _template.py 는 등록되지 않는다
+    assert names["graph_store"] == ["json", "rdf"]
+    assert names["image_generator"] == ["diffusers", "dummy"]  # _template.py 는 등록되지 않는다
     assert {"kiwi", "simple"} <= set(names["request_parser"])
     assert {"hashing", "sentence_transformers"} <= set(names["embedder"])
     assert all(not r.import_errors for r in REGISTRIES.values())
 
 
 def test_unknown_plugin_lists_available_names():
-    with pytest.raises(PluginError, match="사용 가능: dummy"):
+    with pytest.raises(PluginError, match="사용 가능: diffusers, dummy"):
         IMAGE_GENERATORS.get("no_such_model")
 
 

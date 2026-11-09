@@ -1,0 +1,30 @@
+# 03 프롬프트 구성 템플릿 (LLM 미사용). {중괄호} 는 빈칸.
+
+prompt:
+  # 빈칸: {targets} 대상별 묘사, {attributes} 대상에 붙지 못한 사용자 지정 속성,
+  #       {request} 원래 요청 문장, {style} 아래 style
+  positive: "{targets}, {attributes}. {style}"
+  negative: "흐릿함, 저해상도, 글자, 워터마크"
+  style: "디테일한 일러스트, 고해상도"
+  # 요청에서 대상을 하나도 못 찾았을 때 {targets} 자리에 들어갈 내용
+  fallback_targets: "{request}"
+
+target:
+  # 빈칸: {subject} 대상 이름, {attributes} 속성 문구들
+  with_attributes: "{subject}({attributes})"
+  without_attributes: "{subject}"
+  attribute_joiner: ", "
+  target_joiner: ", "
+
+aspect:
+  # 속성별 문구. 빈칸: {values} 값들, {aspect} 속성 이름
+  formats:
+    color: "{values} 색"
+    body_part: "{values}"
+    texture: "{values} 질감"
+    habitat: "배경 {values}"
+    _default: "{aspect} {values}"
+  value_joiner: "/"
+  # 2-hop 이상 경로 값 표기. 예: 뒷다리 -> 길다 => "뒷다리(길다)"
+  path_format: "{head}({rest})"
+  path_joiner: " "

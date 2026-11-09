@@ -1,37 +1,84 @@
 # 01 쿼리 구성 - 노드 종류(label)별 속성 체크리스트
-# 그래프 DB 스키마가 정해지면 labels 아래를 실제 노드 종류 / 관계 이름으로 바꾼다.
 #
-# 속성 항목
-#   path:       hop 별로 따라갈 관계 종류. 길이 = 탐색 깊이. "*" = 모든 관계.
-#               한 hop 에 여러 관계를 허용하려면 리스트: [[HAS_COLOR, COLORED], ...]
-#   properties: 노드 자체 속성에서 바로 읽을 key (값을 속성으로 저장하는 DB 대비)
-#   inherit:    결과가 없으면 상위 개념에서 가져올지 (기본 true)
+# 속성 항목 (셋 중 하나 이상)
+#   sparql:     SPARQL 질의. ?target 에 대상 노드가 들어간다. 대표값은 ?value,
+#               나머지 변수(?date 등)는 템플릿에서 {속성[변수]} 로 쓸 수 있다.
+#               값이 여러 개면 쿼리 안에서 고른다 (ORDER BY ... LIMIT 1).
+#               접두어는 그래프 파일에 선언된 것을 그대로 쓴다 (: = OntoKG-EQ 온톨로지).
+#   properties: 노드 자체 속성에서 바로 읽을 key (rdf 저장소에서는 술어의 로컬 이름)
+#   path:       hop 별로 따라갈 관계 종류 (경로 탐색). 예시는 tests/fixtures/frog_aspects.yaml
+#   inherit:    결과가 없으면 상위 개념에서 가져올지 (기본 true, parent_relation 이 있을 때만)
 # 속성 순서 = 프롬프트에 들어가는 순서
 
 settings:
-  parent_relation: IS_A     # 상위 개념 관계. null 이면 상속하지 않음
+  parent_relation: null     # OntoKG 에는 상위 개념(IS_A) 관계가 없다
   max_inherit_depth: 3
   max_facts_per_aspect: 5
 
 labels:
-  # 형식 예시 (동물). 실제 스키마가 정해지면 교체
-  Animal:
-    color:
-      path: [HAS_COLOR]
-      properties: [color]
-    body_part:
-      path: [HAS_PART, "*"]   # 신체부위 -> 그 부위의 특징 (예: 뒷다리 -> 길다)
-    texture:
-      path: [HAS_TEXTURE]
-      properties: [texture]
-    habitat:
-      path: [LIVES_IN]
+  # OntoKG-EQ 의 회사 (:Company). 회사 프로필 카드에 쓰는 값
+  Company:
+    name:
+      properties: [hasCompanyName]
+    ticker:
+      properties: [hasCompanyIdentifier]
+
+    sector:
+      sparql: |
+        SELECT ?value WHERE {
+          ?target :isClassifiedByIndustrySector ?sector .
+          ?sector rdfs:label ?value .
+        }
+
+    # 시장 통화. 회사와 직접 연결돼 있지 않아서 그래프 안의 환율 관측치에서 가져온다.
+    # (그래프에 시장이 하나뿐일 때만 맞다. 여러 시장을 합치면 시장별로 고쳐야 한다)
+    currency:
+      sparql: |
+        SELECT DISTINCT ?value WHERE {
+          ?fx a :ExchangeRateObservation ;
+              :hasDealtCurrency/:hasCurrencyCode ?value .
+        } LIMIT 1
+
+    eps:
+      sparql: |
+        SELECT ?value ?date ?period_end WHERE {
+          ?obs :isObservationOf ?target ;
+               :hasMetricName "EPS" ;
+               :hasMetricValue ?value ;
+               :hasObservationDate ?date .
+          OPTIONAL { ?obs :observedInPeriod/:hasEndDate ?period_end }
+        } ORDER BY DESC(?date) LIMIT 1
+
+    yoy_growth:
+      sparql: |
+        SELECT ?value ?date WHERE {
+          ?obs :isObservationOf ?target ;
+               :hasMetricName "YoY profit growth %" ;
+               :hasMetricValue ?value ;
+               :hasObservationDate ?date .
+        } ORDER BY DESC(?date) LIMIT 1
+
+    close:
+      sparql: |
+        SELECT ?value ?date WHERE {
+          ?obs :isObservationOf ?target ;
+               :hasMetricName "close price" ;
+               :hasMetricValue ?value ;
+               :hasObservationDate ?date .
+        } ORDER BY DESC(?date) LIMIT 1
+
+    announcement:
+      sparql: |
+        SELECT ?value ?date ?title ?publisher ?url WHERE {
+          ?a :aboutCompany ?target ;
+             :hasAnnouncementType ?value ;
+             :hasAnnouncementDate ?date .
+          OPTIONAL { ?a rdfs:label ?title }
+          OPTIONAL { ?a :publishedBy/rdfs:label ?publisher }
+          OPTIONAL { ?a :hasEvidenceURL ?url }
+        } ORDER BY DESC(?date) LIMIT 1
 
   # labels 에 없는 종류의 노드에 적용
   _default:
-    color:
-      path: [HAS_COLOR]
-      properties: [color]
-    shape:
-      path: [HAS_SHAPE]
-      properties: [shape]
+    name:
+      properties: [label]

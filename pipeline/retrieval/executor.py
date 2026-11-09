@@ -1,8 +1,10 @@
 """02 GraphRAG 검색: 속성별 쿼리를 그래프에서 실행한다.
 
-쿼리 하나 = 대상 노드의 속성값 읽기(properties) + path 에 적힌 관계를 hop 별로 따라가며 값 수집.
+쿼리 하나 = 대상 노드의 속성값 읽기(properties) + path 에 적힌 관계를 hop 별로 따라가며 값 수집
+           + sparql 이 있으면 SPARQL 실행 (?target 에 대상 노드를 넣는다).
 결과가 없으면 상위 개념(aspects.yaml 의 parent_relation, 기본 IS_A)을 따라 올라가 같은 쿼리를 다시 실행한다.
-그래프 저장소의 get_node / out_edges 만 쓰므로 DB 종류와 무관하게 동작한다.
+path / properties 는 그래프 저장소의 get_node / out_edges 만 쓰므로 DB 종류와 무관하게 동작한다.
+sparql 은 저장소의 query() 를 쓰므로 SPARQL 을 지원하는 저장소(rdf)에서만 동작한다.
 """
 
 from __future__ import annotations
@@ -62,7 +64,20 @@ class QueryExecutor:
                     facts.append(Fact(names=[str(v)], node_ids=[node_id], relations=[f"@{key}"], kind="property"))
         if query.path:
             facts.extend(self._traverse(node_id, query.path))
+        if query.sparql:
+            facts.extend(self._sparql(node_id, query.sparql))
         return facts[: self.catalog.max_facts_per_aspect]
+
+    def _sparql(self, node_id: str, sparql: str) -> list[Fact]:
+        """행마다 Fact 하나. 대표값은 ?value (없으면 첫 번째 변수). 값이 없는 행은 버린다."""
+        facts = []
+        for row in self.store.query(sparql, {"target": node_id}):
+            value = row.get("value", next(iter(row.values()), None))
+            if value is None or value == "":
+                continue
+            facts.append(Fact(names=[str(value)], node_ids=[node_id], relations=["sparql"],
+                              kind="sparql", values=row))
+        return facts
 
     def _traverse(self, start: str, path: list[list[str]]) -> list[Fact]:
         """path 를 따라가며 경로를 모은다. 중간에 더 갈 곳이 없으면 거기까지를 결과로 쓴다."""

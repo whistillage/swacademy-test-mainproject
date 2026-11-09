@@ -2,6 +2,11 @@
 
 대상 노드의 종류(label)에 맞는 속성 체크리스트(config/aspects.yaml)를 보고
 속성마다 쿼리를 하나씩 만든다. 사용자가 요청에서 직접 지정한 속성은 그래프에서 찾지 않는다.
+
+속성을 찾는 방법은 셋 중 하나 이상
+  path       관계를 hop 별로 따라가기 (모든 그래프 저장소)
+  properties 노드 자체 속성 읽기 (모든 그래프 저장소)
+  sparql     SPARQL 질의 (SPARQL 을 지원하는 저장소, 예: rdf)
 """
 
 from __future__ import annotations
@@ -18,6 +23,7 @@ class AspectSpec:
     path: list[list[str]]
     properties: list[str]
     inherit: bool
+    sparql: str | None = None
 
 
 class AspectCatalog:
@@ -45,9 +51,18 @@ class AspectCatalog:
         spec = spec or {}
         path = [[str(h) for h in ([hop] if isinstance(hop, str) else hop)] for hop in spec.get("path", [])]
         properties = [str(p) for p in spec.get("properties", [])]
-        if not path and not properties:
-            raise ValueError(f"aspects.yaml labels.{label}.{name}: path 나 properties 중 하나는 필요합니다.")
-        return AspectSpec(name=name, path=path, properties=properties, inherit=bool(spec.get("inherit", True)))
+        sparql = spec.get("sparql") or None
+        if not path and not properties and not sparql:
+            raise ValueError(
+                f"aspects.yaml labels.{label}.{name}: path, properties, sparql 중 하나는 필요합니다."
+            )
+        return AspectSpec(
+            name=name,
+            path=path,
+            properties=properties,
+            inherit=bool(spec.get("inherit", True)),
+            sparql=str(sparql) if sparql else None,
+        )
 
 
 class QueryPlanner:
@@ -77,5 +92,6 @@ class QueryPlanner:
                     path=spec.path,
                     properties=spec.properties,
                     inherit=spec.inherit,
+                    sparql=spec.sparql,
                 ))
         return queries, skipped

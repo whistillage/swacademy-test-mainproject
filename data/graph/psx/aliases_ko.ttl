@@ -1,0 +1,11 @@
+# 원본 그래프(demo_psx.ttl)에는 없는, 이 프로젝트에서 추가한 한국어 별칭.
+# 요청 문장("엥그로 카드 만들어줘")에서 회사 노드를 찾을 때 쓴다.
+# 원본 파일은 수정하지 않고 이 파일을 함께 읽는다 (config.yaml 의 graph_store.params.paths).
+
+@prefix psx: <https://w3id.org/ontokg-eq/psx#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+
+psx:company_1 skos:altLabel "엥그로"@ko, "엥그로홀딩스"@ko .
+psx:company_2 skos:altLabel "파우지비료"@ko, "파우지"@ko .
+psx:company_3 skos:altLabel "파키스탄석유가스개발"@ko, "오지디씨"@ko .
+psx:company_4 skos:altLabel "파키스탄석유"@ko .

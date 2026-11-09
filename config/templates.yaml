@@ -1,30 +1,86 @@
 # 03 프롬프트 구성 템플릿 (LLM 미사용). {중괄호} 는 빈칸.
+#
+# 빈칸
+#   {속성[필드]}  첫 번째 대상의 속성 값. 필드는 raw, text, values, SPARQL 변수(date 등),
+#                 아래 values 규칙이 만든 필드(ko, scene, arrow ...). 예: {sector[scene]}
+#   {subject} 대상 이름, {request} 요청 원문, {style} 아래 style
+#   {targets} {attributes}  대상별 묘사 (경로 탐색 방식 예시: tests/fixtures/frog_templates.yaml)
+#
+# 회사 프로필 카드: 이미지 모델은 배경만 그리고(prompt), 글자와 숫자는 Pillow 가 찍는다(card).
 
 prompt:
-  # 빈칸: {targets} 대상별 묘사, {attributes} 대상에 붙지 못한 사용자 지정 속성,
-  #       {request} 원래 요청 문장, {style} 아래 style
-  positive: "{targets}, {attributes}. {style}"
-  negative: "흐릿함, 저해상도, 글자, 워터마크"
-  style: "디테일한 일러스트, 고해상도"
-  # 요청에서 대상을 하나도 못 찾았을 때 {targets} 자리에 들어갈 내용
+  # 배경 프롬프트 (이미지 모델용, 영어). 글자는 card 로 따로 찍으므로 그림에 글자가 없어야 한다.
+  positive: "{sector[scene]}. {yoy_growth[mood]}. {style}"
+  # FLUX 처럼 negative_prompt 를 지원하지 않는 모델은 무시한다 (04_generation.json 의 ignored)
+  negative: "text, letters, numbers, logo, watermark, signage, blurry, low quality"
+  style: >-
+    Wide editorial illustration for a corporate profile card, clean modern composition,
+    soft natural depth of field, the left half of the frame is calm open sky or soft
+    out-of-focus background, no text, no letters, no logos, high detail
   fallback_targets: "{request}"
 
 target:
-  # 빈칸: {subject} 대상 이름, {attributes} 속성 문구들
   with_attributes: "{subject}({attributes})"
   without_attributes: "{subject}"
   attribute_joiner: ", "
   target_joiner: ", "
 
 aspect:
-  # 속성별 문구. 빈칸: {values} 값들, {aspect} 속성 이름
   formats:
-    color: "{values} 색"
-    body_part: "{values}"
-    texture: "{values} 질감"
-    habitat: "배경 {values}"
     _default: "{aspect} {values}"
   value_joiner: "/"
-  # 2-hop 이상 경로 값 표기. 예: 뒷다리 -> 길다 => "뒷다리(길다)"
   path_format: "{head}({rest})"
   path_joiner: " "
+
+# 값 다듬기 규칙 (pipeline/prompt/values.py)
+values:
+  sector:
+    lookup:
+      "Oil & Gas Exploration Sector Classifier":
+        ko: "석유·가스 탐사"
+        scene: "An oil and gas exploration site in the arid hills of Pakistan, drilling rigs and steel pipelines under a wide sky"
+      "Fertilizer Sector Classifier":
+        ko: "비료"
+        scene: "A modern fertilizer plant with storage silos beside green wheat fields on the plains of Punjab, Pakistan"
+    default:
+      ko: "{raw}"
+      scene: "A modern industrial company campus in Pakistan"
+
+  yoy_growth:
+    number: {decimals: 1, sign: true, suffix: "%", clamp: 999}
+    when:
+      - if: ">= 0"
+        set: {arrow: "▲", color: "#4ADE80", mood: "Warm golden morning light, optimistic and energetic atmosphere"}
+      - if: "< 0"
+        set: {arrow: "▼", color: "#F87171", mood: "Overcast cool blue-grey light, calm and subdued atmosphere"}
+
+  eps:
+    number: {decimals: 2}
+  close:
+    number: {decimals: 2}
+
+  announcement:
+    lookup:
+      "Half-Year Results Announcement": {ko: "반기 실적 발표"}
+      "Quarter Results Announcement": {ko: "분기 실적 발표"}
+      "Financial Results Announcement": {ko: "실적 발표"}
+      "Annual financial results": {ko: "연간 실적 발표"}
+      "Board Meeting Notice": {ko: "이사회 소집 공고"}
+    default: {ko: "{raw}"}
+
+# 이미지 위에 글자로 찍을 카드 (pipeline/render/card.py). 값이 없으면 missing 으로 표시
+card:
+  missing: "–"
+  title: "{name[text]}"
+  subtitle: "{ticker[text]} · {sector[ko]}"
+  rows:
+    - label: "주당순이익 (EPS)"
+      value: "{currency[text]} {eps[text]}"
+      note: "{eps[date]} 발표"
+    - label: "전년 대비 이익"
+      value: "{yoy_growth[arrow]} {yoy_growth[text]}"
+      color: "{yoy_growth[color]}"
+    - label: "종가"
+      value: "{currency[text]} {close[text]}"
+      note: "{close[date]} 기준"
+  footer: "최근 공시: {announcement[ko]} ({announcement[date]})\n출처: {announcement[publisher]} · OntoKG-EQ (CC BY 4.0)"

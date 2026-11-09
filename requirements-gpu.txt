@@ -1,0 +1,9 @@
+# 04 이미지 생성 - 로컬 GPU (image_generator: diffusers)
+# requirements.txt 를 먼저 설치한 뒤 설치한다. CUDA 용 torch 는 따로 설치 (README 의 GPU 설치 참고):
+#   pip install torch==2.15.0 --index-url https://download.pytorch.org/whl/cu132 --force-reinstall --no-deps
+# 2026-11-09 RTX 5060 (8GB, WSL2, CUDA 드라이버 13.3) 에서 확인
+
+diffusers>=0.42.1,<0.43       # Flux2KleinPipeline 포함
+transformers>=5.22            # FLUX.2-klein 텍스트 인코더 (Qwen3)
+accelerate>=1.15
+bitsandbytes>=0.50            # quantization: nf4 / int8

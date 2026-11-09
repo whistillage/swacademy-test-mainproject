@@ -4,6 +4,13 @@ config/templates.yaml 의 빈칸에 쿼리/검색 결과를 채운다.
   - 사용자가 요청에 직접 쓴 속성이 그래프 값보다 우선한다
   - 그래프에서 못 찾은 대상은 요청에 나온 표현 그대로 쓴다
   - 마지막에 translator 플러그인으로 후처리한다 (기본: 그대로)
+
+빈칸 종류
+  {targets} {attributes} {request} {style} {subject}   요청과 대상 묘사
+  {속성[필드]}   첫 번째 대상의 속성 값 (values.py). 예: {sector[scene]}, {eps[text]}
+
+templates.yaml 에 card 가 있으면 이미지 위에 글자로 찍을 카드 내용도 만든다 (PromptResult.card).
+카드 값은 프롬프트(이미지 모델)와 별도로 Pillow 가 그리므로 숫자가 틀리지 않는다.
 """
 
 from __future__ import annotations
@@ -14,6 +21,7 @@ from typing import Any
 from ..plugins.translator.base import Translator
 from ..query.planner import AspectCatalog
 from ..schemas import AspectResult, Fact, LinkedTarget, PromptResult, QueryPlan, RetrievalResult
+from .values import Field, Fields, ValueFormatter
 
 
 class _SafeDict(dict):
@@ -28,6 +36,8 @@ class PromptBuilder:
         self.prompt_cfg = templates.get("prompt") or {}
         self.target_cfg = templates.get("target") or {}
         self.aspect_cfg = templates.get("aspect") or {}
+        self.card_cfg = templates.get("card") or {}
+        self.values = ValueFormatter(templates.get("values"), self.aspect_cfg.get("value_joiner", "/"))
         self.catalog = catalog
         self.translator = translator
 
@@ -40,7 +50,18 @@ class PromptBuilder:
             target_texts.append(text)
             slots.append(slot)
 
-        fields = _SafeDict(request=plan.request, style=self.prompt_cfg.get("style", ""))
+        # 속성별 필드는 첫 번째로 그래프에서 찾은 대상 기준 (카드 한 장 = 대상 하나)
+        primary = next((t for t in plan.targets if t.linked), None)
+        aspect_fields = self._aspect_fields(primary, results) if primary else {}
+        if primary is not None:
+            slots[plan.targets.index(primary)]["fields"] = aspect_fields
+        base = {
+            "request": plan.request,
+            "style": self.prompt_cfg.get("style", ""),
+            "subject": primary.node_name if primary else "",
+            **aspect_fields,
+        }
+        fields = Fields(dict(base), missing="")
         if target_texts:
             fields["targets"] = self.target_cfg.get("target_joiner", ", ").join(target_texts)
         else:  # 요청에서 대상을 하나도 못 찾았을 때
@@ -58,7 +79,41 @@ class PromptBuilder:
             source_positive=source_positive,
             source_negative=source_negative,
             slots=slots,
+            card=self._card(base) if (self.card_cfg and primary) else {},
         )
+
+    def _aspect_fields(
+        self, target: LinkedTarget, results: dict[tuple[str, str], AspectResult]
+    ) -> dict[str, Field]:
+        user = target.mention.attributes
+        out: dict[str, Field] = {}
+        for spec in self.catalog.aspects_for(target.label):
+            if spec.name in user:  # 사용자가 요청에 직접 쓴 값
+                text = self.aspect_cfg.get("value_joiner", "/").join(user[spec.name])
+                out[spec.name] = Field({"raw": user[spec.name][0], "text": text, "values": text,
+                                        "source": "user"})
+                continue
+            result = results.get((str(target.node_id), spec.name))
+            if result is not None and result.status != "missing":
+                out[spec.name] = self.values.field(spec.name, result.facts)
+        return out
+
+    def _card(self, base: dict[str, Any]) -> dict[str, Any]:
+        """templates.yaml 의 card 를 채운다. 값이 없는 빈칸은 card.missing (기본 '–')."""
+        fields = Fields(dict(base), missing=str(self.card_cfg.get("missing", "–")))
+
+        def fill(template: Any) -> str:
+            return str(template or "").format_map(fields).strip()
+
+        rows = []
+        for row in self.card_cfg.get("rows") or []:
+            rows.append({key: fill(value) for key, value in row.items()})
+        return {
+            "title": fill(self.card_cfg.get("title")),
+            "subtitle": fill(self.card_cfg.get("subtitle")),
+            "rows": rows,
+            "footer": fill(self.card_cfg.get("footer")),
+        }
 
     def _describe_target(
         self, target: LinkedTarget, results: dict[tuple[str, str], AspectResult]

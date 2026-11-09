@@ -7,7 +7,8 @@
   01_query_plan.json  요청 분석, 대상 노드, 속성별 쿼리
   02_retrieval.json   속성별 검색 결과
   03_prompt.json      최종 프롬프트와 각 값의 출처
-  04_image*.png       생성 이미지
+  04_background*.png  이미지 모델이 그린 원본 (카드 글자를 합성할 때만)
+  04_image*.png       최종 이미지 (카드가 있으면 글자 합성 결과)
   04_generation.json  이미지 모델 요청/응답 정보
   run.json            사용한 플러그인, 단계별 소요 시간, 오류
 중간에 실패해도 그때까지의 결과와 run.json(오류 포함)은 남는다.
@@ -27,12 +28,13 @@ from typing import Any
 
 from .config import AppConfig
 from .plugins import EMBEDDERS, GRAPH_STORES, IMAGE_GENERATORS, REQUEST_PARSERS, TRANSLATORS
-from .plugins.image_generator.base import ImageRequest
+from .plugins.image_generator.base import GeneratedImage, ImageRequest
 from .prompt.builder import PromptBuilder
 from .query.builder import QueryBuilder
 from .query.lexicon import Lexicon
 from .query.linker import HybridLinker, LinkerSettings
 from .query.planner import AspectCatalog, QueryPlanner
+from .render.card import CardRenderer, CardStyle
 from .retrieval.executor import QueryExecutor
 from .schemas import PromptResult, QueryPlan, RetrievalResult
 
@@ -67,6 +69,8 @@ class Pipeline:
         self.executor = QueryExecutor(self.store, catalog)
         self.prompt_builder = PromptBuilder(config.templates, catalog, TRANSLATORS.create(specs["translator"]))
         self.generator = IMAGE_GENERATORS.create(specs["image_generator"])
+        style = CardStyle.from_dict(config.overlay)
+        self.card_renderer = CardRenderer(style) if style.enabled else None
 
     def run(self, request: str, output_dir: Path | None = None) -> RunRecord:
         run_dir = _new_run_dir(output_dir or self.config.output_dir)
@@ -99,11 +103,22 @@ class Pipeline:
             image_request = self._image_request(prompt)
             with _timer(timings, "04_image"):
                 generation = self.generator.generate(image_request)
-            image_paths = _save_images(run_dir, generation.images)
+            images = generation.images
+            overlay = bool(prompt.card and self.card_renderer)
+            if overlay:
+                assert self.card_renderer is not None
+                _save_images(run_dir, images, "04_background")
+                with _timer(timings, "04_overlay"):
+                    images = [
+                        GeneratedImage(self.card_renderer.render(img.data, prompt.card), "image/png")
+                        for img in images
+                    ]
+            image_paths = _save_images(run_dir, images)
             _write_json(run_dir / "04_generation.json", {
                 "request": asdict(image_request),
                 "model": generation.model,
                 "metadata": generation.metadata,
+                "card_overlay": overlay,
                 "files": [p.name for p in image_paths],
             })
         except Exception as exc:
@@ -142,11 +157,11 @@ def _new_run_dir(root: Path) -> Path:
     return candidate
 
 
-def _save_images(run_dir: Path, images: list[Any]) -> list[Path]:
+def _save_images(run_dir: Path, images: list[Any], stem: str = "04_image") -> list[Path]:
     paths = []
     for i, image in enumerate(images, start=1):
         suffix = "" if len(images) == 1 else f"_{i}"
-        path = run_dir / f"04_image{suffix}{_EXTENSIONS.get(image.mime_type, '.bin')}"
+        path = run_dir / f"{stem}{suffix}{_EXTENSIONS.get(image.mime_type, '.bin')}"
         path.write_bytes(image.data)
         paths.append(path)
     return paths

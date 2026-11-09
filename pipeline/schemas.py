@@ -68,6 +68,7 @@ class AspectQuery(Serializable):
     path: list[list[str]]  # hop 별로 따라갈 관계 종류. "*" 는 모든 관계
     properties: list[str] = field(default_factory=list)  # 노드 속성에서 바로 읽을 key
     inherit: bool = True  # 결과가 없으면 상위 개념에서 가져올지
+    sparql: str | None = None  # 있으면 path 대신 이 SPARQL 로 찾는다 (?target = 대상 노드)
 
 
 @dataclass
@@ -93,7 +94,9 @@ class Fact(Serializable):
     names: list[str]
     node_ids: list[str] = field(default_factory=list)
     relations: list[str] = field(default_factory=list)
-    kind: str = "relation"  # relation | property
+    kind: str = "relation"  # relation | property | sparql
+    # sparql 결과 행 전체 {변수: 값}. 대표값은 ?value. 날짜, 출처 같은 부가 정보도 여기 남는다.
+    values: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -122,3 +125,5 @@ class PromptResult(Serializable):
     source_negative: str
     # 대상별로 어떤 값이 어디서 왔는지 (디버깅용)
     slots: list[dict[str, Any]] = field(default_factory=list)
+    # 이미지 위에 글자로 찍을 카드 내용 (templates.yaml 의 card). 없으면 빈 dict
+    card: dict[str, Any] = field(default_factory=dict)

@@ -1,0 +1,60 @@
+# 테스트 전용 작은 RDF 그래프 (OntoKG-EQ 구조를 흉내 냄, 값은 가짜)
+#   acme: 이익 증가, EPS 관측치 2개(최신 값 고르기 확인), 공시 있음
+#   bolt: 이익 급감(-1234%, clamp 확인), 종가 없음(빈칸 표시 확인)
+
+@prefix : <https://w3id.org/ontokg-eq#> .
+@prefix t: <https://example.org/test#> .
+@prefix rdfs: <http://www.w3.org/2000/01/rdf-schema#> .
+@prefix skos: <http://www.w3.org/2004/02/skos/core#> .
+@prefix xsd: <http://www.w3.org/2001/XMLSchema#> .
+
+t:acme a :Company, :ObservedEntity ;
+    rdfs:label "Acme Mining Limited"@en ;
+    :hasCompanyName "Acme Mining Limited" ;
+    :hasCompanyIdentifier "ACME" ;
+    skos:altLabel "애크미"@ko ;
+    :isClassifiedByIndustrySector t:sector_mining .
+
+t:bolt a :Company, :ObservedEntity ;
+    rdfs:label "Bolt Fertilizer Limited"@en ;
+    :hasCompanyName "Bolt Fertilizer Limited" ;
+    :hasCompanyIdentifier "BOLT" ;
+    :isClassifiedByIndustrySector t:sector_fert .
+
+t:sector_mining a :IndustrySectorClassifier ; rdfs:label "Mining Sector Classifier"@en .
+t:sector_fert a :IndustrySectorClassifier ; rdfs:label "Fertilizer Sector Classifier"@en .
+
+t:fx_1 a :ExchangeRateObservation ;
+    :hasDealtCurrency t:currency_TST ;
+    :hasMetricValue 280.5 .
+t:currency_TST a :Currency ; :hasCurrencyCode "TST" .
+
+t:eps_old a :FundamentalObservation ;
+    :isObservationOf t:acme ; :hasMetricName "EPS" ; :hasMetricValue 10.0 ;
+    :hasObservationDate "2025-02-20"^^xsd:date .
+t:eps_new a :FundamentalObservation ;
+    :isObservationOf t:acme ; :hasMetricName "EPS" ; :hasMetricValue 12.5 ;
+    :hasObservationDate "2026-02-20"^^xsd:date .
+t:growth_acme a :FundamentalObservation ;
+    :isObservationOf t:acme ; :hasMetricName "YoY profit growth %" ; :hasMetricValue 25.04 ;
+    :hasObservationDate "2026-02-20"^^xsd:date .
+t:close_acme_1 a :MarketObservation ;
+    :isObservationOf t:acme ; :hasMetricName "close price" ; :hasMetricValue 1200.0 ;
+    :hasObservationDate "2026-04-01"^^xsd:date .
+t:close_acme_2 a :MarketObservation ;
+    :isObservationOf t:acme ; :hasMetricName "close price" ; :hasMetricValue 1234.567 ;
+    :hasObservationDate "2026-04-02"^^xsd:date .
+t:ann_acme a :Announcement ;
+    rdfs:label "Results for the half year"@en ;
+    :aboutCompany t:acme ;
+    :hasAnnouncementType "Half-Year Results Announcement" ;
+    :hasAnnouncementDate "2026-02-20"^^xsd:date ;
+    :publishedBy t:exchange .
+t:exchange rdfs:label "Test Stock Exchange"@en .
+
+t:eps_bolt a :FundamentalObservation ;
+    :isObservationOf t:bolt ; :hasMetricName "EPS" ; :hasMetricValue 0.21 ;
+    :hasObservationDate "2026-02-26"^^xsd:date .
+t:growth_bolt a :FundamentalObservation ;
+    :isObservationOf t:bolt ; :hasMetricName "YoY profit growth %" ; :hasMetricValue -1234.5 ;
+    :hasObservationDate "2026-02-26"^^xsd:date .

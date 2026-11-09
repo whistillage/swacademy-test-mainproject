@@ -42,6 +42,7 @@ class AppConfig:
     lexicon: dict[str, Any]
     output_dir: Path
     source: Path
+    overlay: dict[str, Any] = field(default_factory=dict)  # 04 카드 글자 합성 설정
     raw: dict[str, Any] = field(default_factory=dict, repr=False)
 
 
@@ -74,6 +75,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         templates=load_side_file("templates"),
         lexicon=load_side_file("lexicon"),
         output_dir=resolve(raw.get("output_dir", "output")),
+        overlay=dict(raw.get("overlay") or {}),
         source=config_path,
         raw=raw,
     )

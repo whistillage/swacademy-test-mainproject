@@ -56,6 +56,14 @@ class GraphStore(ABC):
     def stats(self) -> dict[str, Any]:
         """노드/관계 수 등 요약 정보."""
 
+    def query(self, sparql: str, bindings: dict[str, str]) -> list[dict[str, Any]]:
+        """SPARQL 질의 (선택 기능). aspects.yaml 에 sparql 이 적힌 속성에서만 쓴다.
+
+        bindings 는 쿼리 변수 -> 노드 id. 예: {"target": "psx:company_3"}
+        결과는 행마다 {변수 이름: 값}. 노드는 id 문자열, 리터럴은 파이썬 값(숫자, 날짜, 문자열).
+        """
+        raise NotImplementedError(f"그래프 저장소 '{self.plugin_name}' 은 SPARQL 질의를 지원하지 않습니다.")
+
     def close(self) -> None:
         """연결 정리 (서버형 DB 용). 기본은 아무것도 하지 않는다."""
 
