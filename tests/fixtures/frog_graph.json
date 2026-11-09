@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "nodes": [
+    {"id": "amphibian", "label": "Category", "name": "양서류"},
+    {"id": "frog", "label": "Animal", "name": "개구리", "aliases": ["frog"], "description": "물과 땅을 오가며 사는 양서류"},
+    {"id": "tree_frog", "label": "Animal", "name": "청개구리", "aliases": ["tree frog"], "description": "나무 위에 사는 작은 개구리"},
+    {"id": "lily_pad", "label": "Plant", "name": "연잎", "description": "연못 위에 떠 있는 둥근 잎"},
+    {"id": "green", "label": "Color", "name": "초록"},
+    {"id": "brown", "label": "Color", "name": "갈색"},
+    {"id": "light_green", "label": "Color", "name": "연두"},
+    {"id": "hind_leg", "label": "BodyPart", "name": "뒷다리"},
+    {"id": "webbed_foot", "label": "BodyPart", "name": "물갈퀴"},
+    {"id": "eye", "label": "BodyPart", "name": "눈"},
+    {"id": "long", "label": "Feature", "name": "길다"},
+    {"id": "bulging", "label": "Feature", "name": "튀어나옴"},
+    {"id": "smooth_wet", "label": "Texture", "name": "매끈하고 축축함"},
+    {"id": "pond", "label": "Place", "name": "연못"}
+  ],
+  "edges": [
+    {"source": "frog", "target": "amphibian", "type": "IS_A"},
+    {"source": "tree_frog", "target": "frog", "type": "IS_A"},
+    {"source": "frog", "target": "green", "type": "HAS_COLOR"},
+    {"source": "frog", "target": "brown", "type": "HAS_COLOR"},
+    {"source": "tree_frog", "target": "light_green", "type": "HAS_COLOR"},
+    {"source": "frog", "target": "hind_leg", "type": "HAS_PART"},
+    {"source": "frog", "target": "webbed_foot", "type": "HAS_PART"},
+    {"source": "frog", "target": "eye", "type": "HAS_PART"},
+    {"source": "hind_leg", "target": "long", "type": "HAS_FEATURE"},
+    {"source": "eye", "target": "bulging", "type": "HAS_FEATURE"},
+    {"source": "frog", "target": "smooth_wet", "type": "HAS_TEXTURE"},
+    {"source": "frog", "target": "pond", "type": "LIVES_IN"},
+    {"source": "lily_pad", "target": "green", "type": "HAS_COLOR"}
+  ]
+}

@@ -1,0 +1,69 @@
+# 실행 설정
+# 미정 항목은 각 플러그인의 name(과 params)만 바꾸면 교체된다.
+# 사용 가능한 이름 확인: python run.py --list-plugins
+# 비밀값(API 키)은 .env 에 두고 ${변수명} 으로 참조한다.
+
+# ---------------------------------------------------------------- 플러그인
+
+# 그래프 DB (미정) - 지금은 JSON 파일 저장소
+graph_store:
+  name: json
+  params:
+    path: data/graph/graph.json
+
+# 대상 노드 찾기용 임베딩 모델 (로컬, 무료)
+#   더 높은 품질: model_name: BAAI/bge-m3, query_prefix: "", passage_prefix: ""
+#   다운로드 없이 확인: name: hashing
+embedder:
+  name: sentence_transformers
+  params:
+    model_name: intfloat/multilingual-e5-small
+    query_prefix: "query: "
+    passage_prefix: "passage: "
+    device: cpu
+
+# 요청 분석기 - kiwi(형태소 분석) | simple(규칙 기반)
+request_parser:
+  name: kiwi
+  params: {}
+
+# 프롬프트 후처리 (영어 변환 여부 미정) - identity = 그대로
+translator:
+  name: identity
+  params: {}
+
+# 이미지 생성 모델 (미정) - dummy = 프롬프트를 적은 자리표시 이미지
+# 새 모델 추가: pipeline/plugins/image_generator/_template.py 참고
+image_generator:
+  name: dummy
+  params: {}
+
+# ---------------------------------------------------------------- 단계 설정
+
+# 01 쿼리 구성 - 대상 노드 찾기 (하이브리드 검색)
+# 채택 기준값은 임베딩 모델과 실제 그래프가 정해지면 다시 맞춰야 한다.
+linker:
+  top_k: 5
+  rrf_k: 60
+  min_vector_score: 0.85
+  min_keyword_overlap: 0.5
+  include_description: true
+  cache_dir: data/index
+
+# 04 이미지 생성 - 모델과 무관한 공통 요청값
+# 모델이 지원하지 않는 값은 플러그인이 무시할 수 있다. 모델 전용 옵션은 extra 에.
+generation:
+  width: 1024
+  height: 1024
+  num_images: 1
+  seed: null
+  extra: {}
+
+# ---------------------------------------------------------------- 파일
+
+files:
+  aspects: config/aspects.yaml      # 노드 종류별 속성 체크리스트
+  templates: config/templates.yaml  # 프롬프트 템플릿
+  lexicon: config/lexicon.yaml      # 사용자 지정 속성 사전
+
+output_dir: output

@@ -1,0 +1,37 @@
+# 01 쿼리 구성 - 노드 종류(label)별 속성 체크리스트
+# 그래프 DB 스키마가 정해지면 labels 아래를 실제 노드 종류 / 관계 이름으로 바꾼다.
+#
+# 속성 항목
+#   path:       hop 별로 따라갈 관계 종류. 길이 = 탐색 깊이. "*" = 모든 관계.
+#               한 hop 에 여러 관계를 허용하려면 리스트: [[HAS_COLOR, COLORED], ...]
+#   properties: 노드 자체 속성에서 바로 읽을 key (값을 속성으로 저장하는 DB 대비)
+#   inherit:    결과가 없으면 상위 개념에서 가져올지 (기본 true)
+# 속성 순서 = 프롬프트에 들어가는 순서
+
+settings:
+  parent_relation: IS_A     # 상위 개념 관계. null 이면 상속하지 않음
+  max_inherit_depth: 3
+  max_facts_per_aspect: 5
+
+labels:
+  # 형식 예시 (동물). 실제 스키마가 정해지면 교체
+  Animal:
+    color:
+      path: [HAS_COLOR]
+      properties: [color]
+    body_part:
+      path: [HAS_PART, "*"]   # 신체부위 -> 그 부위의 특징 (예: 뒷다리 -> 길다)
+    texture:
+      path: [HAS_TEXTURE]
+      properties: [texture]
+    habitat:
+      path: [LIVES_IN]
+
+  # labels 에 없는 종류의 노드에 적용
+  _default:
+    color:
+      path: [HAS_COLOR]
+      properties: [color]
+    shape:
+      path: [HAS_SHAPE]
+      properties: [shape]

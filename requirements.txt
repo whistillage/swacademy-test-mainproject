@@ -1,0 +1,18 @@
+# Python 3.13 에서 확인 (2026-11-09)
+
+# 공통
+pyyaml>=6.0,<7
+python-dotenv>=1.0,<2
+numpy>=2.0,<3
+
+# 01 쿼리 구성 - 요청 분석 (request_parser: kiwi)
+kiwipiepy>=0.24,<0.25
+
+# 01 쿼리 구성 - 대상 노드 찾기 임베딩 (embedder: sentence_transformers, torch 포함)
+sentence-transformers>=6.2,<7
+
+# 04 이미지 생성 - 자리표시 이미지 (image_generator: dummy)
+pillow>=11
+
+# 테스트
+pytest>=9
